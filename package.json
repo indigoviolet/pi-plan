@@ -1,6 +1,6 @@
 {
 	"name": "@juanibiapina/pi-plan",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "Pi extension for plan mode - read-only exploration and analysis",
 	"type": "module",
 	"main": "dist/index.js",
@@ -24,7 +24,9 @@
 		"read-only"
 	],
 	"pi": {
-		"extensions": ["./dist/index.js"]
+		"extensions": [
+			"./dist/index.js"
+		]
 	},
 	"author": "Juan Ibiapina",
 	"license": "MIT",
