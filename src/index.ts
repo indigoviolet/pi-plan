@@ -12,10 +12,10 @@
 import { getSetting, type SettingDefinition } from "@juanibiapina/pi-extension-settings";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type { KeyId } from "@mariozechner/pi-tui";
+import { Type } from "@sinclair/typebox";
 
-// Tools
-const PLAN_MODE_TOOLS = ["read", "bash", "grep", "find", "ls", "questionnaire"];
-const NORMAL_MODE_TOOLS = ["read", "bash", "edit", "write"];
+// Read-only tools allowed in plan mode (exit_plan_mode is added dynamically since it's registered by this extension)
+const PLAN_MODE_TOOLS = ["read", "bash", "grep", "find", "ls", "questionnaire", "exit_plan_mode"];
 
 // Messages
 const PLAN_MODE_ACTIVE_MESSAGE = `<system-reminder>
@@ -37,6 +37,12 @@ Your current responsibility is to think, read, search, and discuss to construct 
 Ask the user clarifying questions or ask for their opinion when weighing tradeoffs.
 
 **NOTE:** At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
+
+---
+
+## Exiting Plan Mode
+
+When your investigation is complete and you have a well-formed plan ready for the user to review, call the \`exit_plan_mode\` tool with a summary of your findings and proposed plan. The user will be asked to confirm the transition to build mode. If they decline, continue refining the plan.
 
 ---
 
@@ -70,6 +76,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	let planModeEnabled = false;
 	let lastMessagedState: boolean | null = null;
+	let savedTools: string[] | null = null;
 
 	pi.registerFlag("plan", {
 		description: "Start in plan mode (read-only exploration)",
@@ -114,18 +121,99 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}
 	}
 
-	function togglePlanMode(ctx: ExtensionContext): void {
-		planModeEnabled = !planModeEnabled;
-
-		if (planModeEnabled) {
-			pi.setActiveTools(PLAN_MODE_TOOLS);
-			ctx.ui.notify(`Plan mode enabled. Tools: ${PLAN_MODE_TOOLS.join(", ")}`);
-		} else {
-			pi.setActiveTools(NORMAL_MODE_TOOLS);
-			ctx.ui.notify("Plan mode disabled. Full access restored.");
-		}
+	function enterPlanMode(ctx: ExtensionContext): void {
+		savedTools = pi.getActiveTools();
+		planModeEnabled = true;
+		pi.setActiveTools(PLAN_MODE_TOOLS);
+		ctx.ui.notify(`Plan mode enabled. Tools: ${PLAN_MODE_TOOLS.join(", ")}`);
 		updateStatus(ctx);
 	}
+
+	function exitPlanMode(ctx: ExtensionContext): void {
+		planModeEnabled = false;
+		if (savedTools) {
+			pi.setActiveTools(savedTools);
+			savedTools = null;
+		}
+		ctx.ui.notify("Plan mode disabled. Full access restored.");
+		updateStatus(ctx);
+	}
+
+	function togglePlanMode(ctx: ExtensionContext): void {
+		if (planModeEnabled) {
+			exitPlanMode(ctx);
+		} else {
+			enterPlanMode(ctx);
+		}
+	}
+
+	// Tool for the agent to request exiting plan mode (with human approval)
+	pi.registerTool({
+		name: "exit_plan_mode",
+		label: "Exit Plan Mode",
+		description:
+			"Request to exit plan mode and switch to build mode. Call this when your investigation is complete and you have a well-formed plan ready for review. Include a clear summary of your plan in the reason parameter so the user can make an informed decision. The user will be asked to confirm the transition.",
+		parameters: Type.Object({
+			reason: Type.String({
+				description:
+					"Summary of what you investigated and the plan you are proposing. This is shown to the user in the confirmation dialog.",
+			}),
+		}),
+
+		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+			if (!planModeEnabled) {
+				throw new Error("Plan mode is not currently active.");
+			}
+
+			if (!ctx.hasUI) {
+				throw new Error("Cannot exit plan mode: no UI available (running in non-interactive mode).");
+			}
+
+			ctx.ui.notify(params.reason, "info");
+
+			const choice = await ctx.ui.select("Exit plan mode?", [
+				"Exit plan mode",
+				"Stay in plan mode",
+				"Reply...",
+			]);
+
+			if (choice === "Exit plan mode") {
+				exitPlanMode(ctx);
+				return {
+					content: [
+						{
+							type: "text",
+							text: "Plan mode exited. You now have full tool access. Proceed with implementation.",
+						},
+					],
+					details: { approved: true },
+				};
+			}
+
+			if (choice === "Reply...") {
+				const reply = await ctx.ui.input("Feedback:", "");
+				const feedback = reply?.trim();
+				if (feedback) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `User wants to stay in plan mode and provided feedback: ${feedback}`,
+							},
+						],
+						details: { approved: false, feedback },
+					};
+				}
+			}
+
+			// "Stay in plan mode", Escape, or empty reply — abort the turn silently
+			ctx.abort();
+			return {
+				content: [{ type: "text", text: "User declined to exit plan mode." }],
+				details: { approved: false },
+			};
+		},
+	});
 
 	pi.registerCommand("plan", {
 		description: "Toggle plan mode (read-only exploration)",
@@ -188,6 +276,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}
 
 		if (planModeEnabled) {
+			savedTools = pi.getActiveTools();
 			pi.setActiveTools(PLAN_MODE_TOOLS);
 		}
 		updateStatus(ctx);
@@ -204,9 +293,11 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}
 
 		if (planModeEnabled) {
+			savedTools = pi.getActiveTools();
 			pi.setActiveTools(PLAN_MODE_TOOLS);
-		} else {
-			pi.setActiveTools(NORMAL_MODE_TOOLS);
+		} else if (savedTools) {
+			pi.setActiveTools(savedTools);
+			savedTools = null;
 		}
 		updateStatus(ctx);
 	});
