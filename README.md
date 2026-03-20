@@ -11,7 +11,8 @@ A [pi](https://github.com/badlogic/pi-mono) extension for plan mode — read-onl
 - **`/plan` command** — Toggle plan mode on and off
 - **Keyboard shortcut** — `alt+p` by default, configurable via `/extension-settings`
 - **Read-only tools** — Only safe, non-modifying tools are available while in plan mode
-- **Session persistence** — System reminders are kept in session history, so what the LLM sees is exactly what you see
+- **System prompt guidance** — While active, plan mode adds explicit planning-only instructions to the system prompt
+- **Session persistence** — Explicit plan-mode state is persisted for resume and integrations
 - **Machine-readable state** — Emits explicit session state and live events for other extensions
 - **Status indicator** — Shows `⏸ plan` in the status bar when active
 - **Powerbar support** — Emits a `⏸ plan` segment to [pi-powerbar](https://github.com/juanibiapina/pi-powerbar) when plan mode is active
@@ -56,9 +57,9 @@ pi --plan
 
 ### How It Works
 
-Plan mode works by injecting system reminder messages into the session when the mode changes. These messages instruct the LLM to operate in read-only mode (or restore full access when exiting). The messages are kept in the session history, so what is sent to the LLM is always exactly what you see in the session — no hidden prompt manipulation.
+While plan mode is active, `pi-plan` appends a planning-only instruction block to the system prompt for each turn. That prompt explicitly forbids direct file edits and workaround paths such as Python scripts, shell redirection, or generated scripts used to bypass blocked tools.
 
-In addition, `pi-plan` now writes explicit machine-readable session state so other extensions can reliably detect plan mode without scraping hidden prompt messages. On resume, `pi-plan` prefers that explicit state and falls back to the older hidden-message history for backward compatibility.
+Separately, `pi-plan` persists explicit machine-readable session state so plan mode can be restored on resume and detected reliably by other extensions. On resume, `pi-plan` prefers that explicit state and falls back to the older hidden `plan-mode-enter` / `plan-mode-exit` message history for backward compatibility with older sessions.
 
 ### Integration
 
@@ -74,7 +75,7 @@ Other extensions can integrate with `pi-plan` in two ways:
    - event: `"plan-mode:changed"`
    - payload: `{ enabled: boolean, source: "@indigoviolet/pi-plan" }`
 
-The hidden `plan-mode-enter` / `plan-mode-exit` messages are still emitted for LLM behavior, but integrations should prefer `plan-mode-state` for machine-readable state.
+Current integrations should prefer `plan-mode-state` for machine-readable state. Legacy hidden `plan-mode-enter` / `plan-mode-exit` messages are only consulted when restoring older sessions that predate explicit state persistence.
 
 ## License
 

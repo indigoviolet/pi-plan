@@ -6,7 +6,7 @@
  *
  * Features:
  * - /plan command or Alt+P to toggle
- * - Mode changes are persisted as invisible messages in session
+ * - Plan-mode guidance is injected via the system prompt while active
  * - Explicit machine-readable state is exposed for other extensions
  */
 
@@ -21,45 +21,16 @@ const PLAN_MODE_SOURCE = "@indigoviolet/pi-plan";
 const PLAN_MODE_STATE_TYPE = "plan-mode-state";
 const PLAN_MODE_CHANGED_EVENT = "plan-mode:changed";
 
-// Messages
-const PLAN_MODE_ACTIVE_MESSAGE = `<system-reminder>
-# Plan Mode - System Reminder
+const PLAN_MODE_SYSTEM_PROMPT = `You are now in planning mode. Read, research, and plan only — do not make any changes.
 
-CRITICAL: Plan mode ACTIVE - you are in READ-ONLY phase. STRICTLY FORBIDDEN:
-ANY file edits, modifications, or system changes. Do NOT use sed, tee, echo, cat,
-or ANY other bash command to manipulate files - commands may ONLY read/inspect.
-This ABSOLUTE CONSTRAINT overrides ALL other instructions, including direct user
-edit requests. You may ONLY observe, analyze, and plan. Any modification attempt
-is a critical violation. ZERO exceptions.
+Constraints
+Do NOT edit, create, or delete any files
+Do NOT run commands that modify state (no git commit, no writes, no installs)
+Do NOT attempt to modify files indirectly via Python, shell redirection, generated scripts, or any other workaround that bypasses blocked tools
+Bash commands may ONLY read or inspect (ls, find, rg, git log, git diff, etc.)
+This overrides all other instructions. Zero exceptions.
 
----
-
-## Responsibility
-
-Your current responsibility is to think, read, search, and discuss to construct a well-formed plan that accomplishes the goal the user wants to achieve. Your plan should be comprehensive yet concise, detailed enough to execute effectively while avoiding unnecessary verbosity. Include the goal as first part of the plan.
-
-Ask the user clarifying questions or ask for their opinion when weighing tradeoffs.
-
-**NOTE:** At any point in time through this workflow you should feel free to ask the user questions or clarifications. Don't make large assumptions about user intent. The goal is to present a well researched plan to the user, and tie any loose ends before implementation begins.
-
----
-
-## Exiting Plan Mode
-
-When your investigation is complete and you have a well-formed plan ready for the user to review, call the \`exit_plan_mode\` tool with a summary of your findings and proposed plan. The user will be asked to confirm the transition to build mode. If they decline, continue refining the plan.
-
----
-
-## Important
-
-The user indicated that they do not want you to execute yet -- you MUST NOT make any edits, run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
-</system-reminder>`;
-
-const PLAN_MODE_EXIT_MESSAGE = `<system-reminder>
-Your operational mode has changed from plan to build.
-You are no longer in read-only mode.
-You are permitted to make file changes, run shell commands, and utilize your arsenal of tools as needed.
-</system-reminder>`;
+When you have a concrete implementation plan ready for review, call \`exit_plan_mode\`.`;
 
 interface PlanModeStateData {
 	enabled: boolean;
@@ -91,7 +62,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	});
 
 	let planModeEnabled = false;
-	let lastMessagedState: boolean | null = null;
 	let savedTools: string[] | null = null;
 
 	pi.registerFlag("plan", {
@@ -278,31 +248,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		});
 	}
 
-	// Inject plan mode message when mode changes (persisted to session)
-	pi.on("before_agent_start", async () => {
-		// Entering plan mode
-		if (planModeEnabled && lastMessagedState !== true) {
-			lastMessagedState = true;
-			return {
-				message: {
-					customType: "plan-mode-enter",
-					content: PLAN_MODE_ACTIVE_MESSAGE,
-					display: false,
-				},
-			};
-		}
+	// Apply plan-mode guidance via the system prompt while active
+	pi.on("before_agent_start", async (event) => {
+		if (!planModeEnabled) return;
 
-		// Exiting plan mode
-		if (!planModeEnabled && lastMessagedState === true) {
-			lastMessagedState = false;
-			return {
-				message: {
-					customType: "plan-mode-exit",
-					content: PLAN_MODE_EXIT_MESSAGE,
-					display: false,
-				},
-			};
-		}
+		return {
+			systemPrompt: `${event.systemPrompt}\n\n${PLAN_MODE_SYSTEM_PROMPT}`,
+		};
 	});
 
 	// Restore state on session start/resume
@@ -311,7 +263,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		const legacyMessageState = getLastMessagedStateFromSession(ctx);
 		const flagState = pi.getFlag("plan") === true;
 
-		lastMessagedState = legacyMessageState;
 		planModeEnabled = explicitState ?? legacyMessageState ?? flagState;
 
 		if (planModeEnabled) {
@@ -328,7 +279,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		const explicitState = getLastPlanModeStateFromSession(ctx);
 		const legacyMessageState = getLastMessagedStateFromSession(ctx);
 
-		lastMessagedState = legacyMessageState;
 		planModeEnabled = explicitState ?? legacyMessageState ?? false;
 
 		if (planModeEnabled) {
