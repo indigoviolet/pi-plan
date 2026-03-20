@@ -12,6 +12,7 @@ A [pi](https://github.com/badlogic/pi-mono) extension for plan mode — read-onl
 - **Keyboard shortcut** — `alt+p` by default, configurable via `/extension-settings`
 - **Read-only tools** — Only safe, non-modifying tools are available while in plan mode
 - **Session persistence** — System reminders are kept in session history, so what the LLM sees is exactly what you see
+- **Machine-readable state** — Emits explicit session state and live events for other extensions
 - **Status indicator** — Shows `⏸ plan` in the status bar when active
 - **Powerbar support** — Emits a `⏸ plan` segment to [pi-powerbar](https://github.com/juanibiapina/pi-powerbar) when plan mode is active
 
@@ -55,7 +56,25 @@ pi --plan
 
 ### How It Works
 
-Plan mode works by injecting system reminder messages into the session when the mode changes. These messages instruct the LLM to operate in read-only mode (or restore full access when exiting). The messages are kept in the session history, so what is sent to the LLM is always exactly what you see in the session — no hidden prompt manipulation. When resuming a session that was in plan mode, the mode is automatically restored from these messages.
+Plan mode works by injecting system reminder messages into the session when the mode changes. These messages instruct the LLM to operate in read-only mode (or restore full access when exiting). The messages are kept in the session history, so what is sent to the LLM is always exactly what you see in the session — no hidden prompt manipulation.
+
+In addition, `pi-plan` now writes explicit machine-readable session state so other extensions can reliably detect plan mode without scraping hidden prompt messages. On resume, `pi-plan` prefers that explicit state and falls back to the older hidden-message history for backward compatibility.
+
+### Integration
+
+Other extensions can integrate with `pi-plan` in two ways:
+
+1. **Persistent session state** via a custom session entry:
+   - `customType: "plan-mode-state"`
+   - `data: { enabled: boolean, source: "@indigoviolet/pi-plan" }`
+
+   This is the canonical integration point for checking whether plan mode is currently active from `ctx.sessionManager.getEntries()`.
+
+2. **Live event notifications** via the shared event bus:
+   - event: `"plan-mode:changed"`
+   - payload: `{ enabled: boolean, source: "@indigoviolet/pi-plan" }`
+
+The hidden `plan-mode-enter` / `plan-mode-exit` messages are still emitted for LLM behavior, but integrations should prefer `plan-mode-state` for machine-readable state.
 
 ## License
 

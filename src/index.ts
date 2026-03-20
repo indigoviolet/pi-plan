@@ -7,6 +7,7 @@
  * Features:
  * - /plan command or Alt+P to toggle
  * - Mode changes are persisted as invisible messages in session
+ * - Explicit machine-readable state is exposed for other extensions
  */
 
 import { getSetting, type SettingDefinition } from "@juanibiapina/pi-extension-settings";
@@ -16,6 +17,9 @@ import { Type } from "@sinclair/typebox";
 
 // Read-only tools allowed in plan mode (exit_plan_mode is added dynamically since it's registered by this extension)
 const PLAN_MODE_TOOLS = ["read", "bash", "grep", "find", "ls", "questionnaire", "exit_plan_mode"];
+const PLAN_MODE_SOURCE = "@indigoviolet/pi-plan";
+const PLAN_MODE_STATE_TYPE = "plan-mode-state";
+const PLAN_MODE_CHANGED_EVENT = "plan-mode:changed";
 
 // Messages
 const PLAN_MODE_ACTIVE_MESSAGE = `<system-reminder>
@@ -57,6 +61,18 @@ You are no longer in read-only mode.
 You are permitted to make file changes, run shell commands, and utilize your arsenal of tools as needed.
 </system-reminder>`;
 
+interface PlanModeStateData {
+	enabled: boolean;
+	source: string;
+}
+
+function isCustomTypeEntry(
+	entry: unknown,
+	type: "custom" | "custom_message",
+): entry is { type: "custom" | "custom_message"; customType?: string; data?: unknown } {
+	return !!entry && typeof entry === "object" && "type" in entry && (entry as { type?: string }).type === type;
+}
+
 export default function planModeExtension(pi: ExtensionAPI): void {
 	// Register powerbar segment
 	pi.events.emit("powerbar:register-segment", { id: "plan-mode", label: "Plan Mode" });
@@ -84,18 +100,47 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		default: false,
 	});
 
-	// Scan session for last plan mode message to determine lastMessagedState
+	function appendPlanModeState(enabled: boolean): void {
+		pi.appendEntry(PLAN_MODE_STATE_TYPE, {
+			enabled,
+			source: PLAN_MODE_SOURCE,
+		} satisfies PlanModeStateData);
+	}
+
+	function emitPlanModeChanged(enabled: boolean): void {
+		pi.events.emit(PLAN_MODE_CHANGED_EVENT, {
+			enabled,
+			source: PLAN_MODE_SOURCE,
+		} satisfies PlanModeStateData);
+	}
+
+	function getLastPlanModeStateFromSession(ctx: ExtensionContext): boolean | null {
+		const entries = ctx.sessionManager.getEntries();
+
+		for (let i = entries.length - 1; i >= 0; i--) {
+			const entry = entries[i];
+
+			if (isCustomTypeEntry(entry, "custom") && entry.customType === PLAN_MODE_STATE_TYPE) {
+				const data = entry.data as Partial<PlanModeStateData> | undefined;
+				if (typeof data?.enabled === "boolean") return data.enabled;
+			}
+		}
+
+		return null;
+	}
+
+	// Scan session for last legacy plan mode message to determine lastMessagedState
 	function getLastMessagedStateFromSession(ctx: ExtensionContext): boolean | null {
 		const entries = ctx.sessionManager.getEntries();
 
 		// Walk backwards to find the last plan-mode-enter or plan-mode-exit message
 		for (let i = entries.length - 1; i >= 0; i--) {
 			const entry = entries[i];
-			if (entry.type === "custom_message") {
-				const customEntry = entry as { customType?: string };
-				if (customEntry.customType === "plan-mode-enter") {
+			if (isCustomTypeEntry(entry, "custom_message")) {
+				if (entry.customType === "plan-mode-enter") {
 					return true;
-				} else if (customEntry.customType === "plan-mode-exit") {
+				}
+				if (entry.customType === "plan-mode-exit") {
 					return false;
 				}
 			}
@@ -125,6 +170,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		savedTools = pi.getActiveTools();
 		planModeEnabled = true;
 		pi.setActiveTools(PLAN_MODE_TOOLS);
+		appendPlanModeState(true);
+		emitPlanModeChanged(true);
 		ctx.ui.notify(`Plan mode enabled. Tools: ${PLAN_MODE_TOOLS.join(", ")}`);
 		updateStatus(ctx);
 	}
@@ -135,6 +182,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			pi.setActiveTools(savedTools);
 			savedTools = null;
 		}
+		appendPlanModeState(false);
+		emitPlanModeChanged(false);
 		ctx.ui.notify("Plan mode disabled. Full access restored.");
 		updateStatus(ctx);
 	}
@@ -258,35 +307,29 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	// Restore state on session start/resume
 	pi.on("session_start", async (_event, ctx) => {
-		// Check --plan flag
-		if (pi.getFlag("plan") === true) {
-			planModeEnabled = true;
-		}
+		const explicitState = getLastPlanModeStateFromSession(ctx);
+		const legacyMessageState = getLastMessagedStateFromSession(ctx);
+		const flagState = pi.getFlag("plan") === true;
 
-		// Restore lastMessagedState from session history
-		lastMessagedState = getLastMessagedStateFromSession(ctx);
-
-		// If session had plan mode active, restore it
-		if (lastMessagedState === true) {
-			planModeEnabled = true;
-		}
+		lastMessagedState = legacyMessageState;
+		planModeEnabled = explicitState ?? legacyMessageState ?? flagState;
 
 		if (planModeEnabled) {
 			savedTools = pi.getActiveTools();
 			pi.setActiveTools(PLAN_MODE_TOOLS);
+		} else {
+			savedTools = null;
 		}
 		updateStatus(ctx);
 	});
 
 	// Reset state on session switch (/new or /resume)
 	pi.on("session_switch", async (_event, ctx) => {
-		// Restore lastMessagedState from new session's history
-		lastMessagedState = getLastMessagedStateFromSession(ctx);
+		const explicitState = getLastPlanModeStateFromSession(ctx);
+		const legacyMessageState = getLastMessagedStateFromSession(ctx);
 
-		// If resumed session had plan mode active, restore it
-		if (lastMessagedState === true) {
-			planModeEnabled = true;
-		}
+		lastMessagedState = legacyMessageState;
+		planModeEnabled = explicitState ?? legacyMessageState ?? false;
 
 		if (planModeEnabled) {
 			savedTools = pi.getActiveTools();
