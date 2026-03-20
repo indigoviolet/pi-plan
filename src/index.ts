@@ -5,7 +5,7 @@
  * When enabled, only read-only tools are available.
  *
  * Features:
- * - /plan command or Ctrl+T to toggle
+ * - /plan command or Alt+P to toggle
  * - Mode changes are persisted as invisible messages in session
  */
 
@@ -68,8 +68,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			{
 				id: "shortcut",
 				label: "Keyboard shortcut",
-				description: "Shortcut to toggle plan mode. Example: tab",
-				defaultValue: "",
+				description: "Shortcut to toggle plan mode. Example: alt+p",
+				defaultValue: "alt+p",
 			},
 		] satisfies SettingDefinition[],
 	});
@@ -171,11 +171,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 			ctx.ui.notify(params.reason, "info");
 
-			const choice = await ctx.ui.select("Exit plan mode?", [
-				"Exit plan mode",
-				"Stay in plan mode",
-				"Reply...",
-			]);
+			const choice = await ctx.ui.select("Exit plan mode?", ["Exit plan mode", "Stay in plan mode", "Reply..."]);
 
 			if (choice === "Exit plan mode") {
 				exitPlanMode(ctx);
@@ -223,7 +219,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	});
 
 	// Register shortcut if configured
-	const shortcut = getSetting("plan", "shortcut");
+	const shortcut = getSetting("plan", "shortcut", "alt+p");
 	if (shortcut) {
 		pi.registerShortcut(shortcut as KeyId, {
 			description: "Toggle plan mode",

@@ -9,7 +9,7 @@ A [pi](https://github.com/badlogic/pi-mono) extension for plan mode — read-onl
 ## Features
 
 - **`/plan` command** — Toggle plan mode on and off
-- **Configurable shortcut** — Optional keyboard shortcut via `/extension-settings`
+- **Keyboard shortcut** — `alt+p` by default, configurable via `/extension-settings`
 - **Read-only tools** — Only safe, non-modifying tools are available while in plan mode
 - **Session persistence** — System reminders are kept in session history, so what the LLM sees is exactly what you see
 - **Status indicator** — Shows `⏸ plan` in the status bar when active
@@ -37,7 +37,7 @@ Use `/plan` again to return to normal mode with full tool access.
 
 ### Keyboard Shortcut
 
-No shortcut is bound by default. To configure one, use `/extension-settings` and set the `shortcut` setting under `plan` (e.g. `tab`, `ctrl+p`).
+`alt+p` is bound by default. To change or disable it, use `/extension-settings` and edit the `shortcut` setting under `plan` (e.g. `tab`, `ctrl+alt+p`, or empty to disable it).
 
 > **Note:** The `/extension-settings` command is provided by the [`@juanibiapina/pi-extension-settings`](https://github.com/juanibiapina/pi-extension-settings) package, which must be installed separately:
 >

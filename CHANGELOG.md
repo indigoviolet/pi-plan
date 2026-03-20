@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Set `alt+p` as the default plan-mode toggle shortcut while keeping it user-configurable via `/extension-settings`
+- Switch the package to TS-first publishing by shipping `src/index.ts` directly instead of a built `dist/` output
+
 ## [0.3.1] - 2026-03-07
 
 ### Fixed

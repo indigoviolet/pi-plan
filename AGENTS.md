@@ -3,7 +3,7 @@
 ## Build and Check
 
 - Run check with `npm run check` (biome lint + typecheck)
-- Build with `npm run build`
+- This package is TS-first; there is no separate build step
 
 ## Release Process
 

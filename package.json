@@ -3,17 +3,12 @@
 	"version": "0.4.0",
 	"description": "Pi extension for plan mode - read-only exploration and analysis",
 	"type": "module",
-	"main": "dist/index.js",
-	"types": "./dist/index.d.ts",
 	"scripts": {
-		"clean": "rm -rf dist",
-		"build": "tsc -p tsconfig.build.json",
-		"dev": "tsc -p tsconfig.build.json --watch",
 		"check": "biome check --write --error-on-warnings . && tsc --noEmit",
-		"prepublishOnly": "npm run clean && npm run build && npm run check"
+		"prepublishOnly": "npm run check"
 	},
 	"files": [
-		"dist/**/*",
+		"src/**/*",
 		"README.md"
 	],
 	"keywords": [
@@ -25,7 +20,7 @@
 	],
 	"pi": {
 		"extensions": [
-			"./dist/index.js"
+			"./src/index.ts"
 		]
 	},
 	"author": "Juan Ibiapina",
