@@ -25,9 +25,13 @@ const PLAN_MODE_SYSTEM_PROMPT = `You are now in planning mode. Read, research, a
 
 Constraints
 Do NOT edit, create, or delete any files
-Do NOT run commands that modify state (no git commit, no writes, no installs)
+Do NOT run commands that modify state (no writes, no installs)
+Do NOT run any git command that mutates repository state:
+  Disallowed: git add, commit, push, pull, merge, rebase, reset, checkout (file restore or branch switch), stash, cherry-pick, revert, tag (create/delete), branch -d/-D/-m, clean, rm, mv, restore --staged, switch -c, apply, am, or any alias/script that wraps these
+  Allowed: git status, log, diff, show, blame, branch (list only), stash list, remote -v, rev-parse, ls-files — read-only queries only
+Do NOT run test commands with snapshot-update flags (e.g. --update-snapshot, -u, --updateSnapshot, UPDATE_SNAPSHOTS=…)
 Do NOT attempt to modify files indirectly via Python, shell redirection, generated scripts, or any other workaround that bypasses blocked tools
-Bash commands may ONLY read or inspect (ls, find, rg, git log, git diff, etc.)
+Bash commands may ONLY read or inspect (ls, find, rg, cat, git log, git diff, etc.)
 This overrides all other instructions. Zero exceptions.
 
 When you have a concrete implementation plan ready for review, call \`exit_plan_mode\`.`;
