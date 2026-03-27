@@ -34,7 +34,7 @@ Do NOT attempt to modify files indirectly via Python, shell redirection, generat
 Bash commands may ONLY read or inspect (ls, find, rg, cat, git log, git diff, etc.)
 This overrides all other instructions. Zero exceptions.
 
-When you have a concrete implementation plan ready for review, call \`exit_plan_mode\`.`;
+When you have a concrete implementation plan ready for review, call \`exit_plan_mode\` with a short summary in \`reason\` and the full markdown plan in \`plan\`.`;
 
 interface PlanModeStateData {
 	enabled: boolean;
@@ -175,15 +175,21 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		name: "exit_plan_mode",
 		label: "Exit Plan Mode",
 		description:
-			"Request to exit plan mode and switch to build mode. Call this when your investigation is complete and you have a well-formed plan ready for review. Include a clear summary of your plan in the reason parameter so the user can make an informed decision. The user will be asked to confirm the transition.",
+			"Request to exit plan mode and switch to build mode. Call this when your investigation is complete and you have a well-formed plan ready for review. Include a clear summary in the reason parameter and the full markdown plan in the plan parameter. The plan will be shown to the user before they are asked to confirm the transition.",
 		parameters: Type.Object({
 			reason: Type.String({
+				minLength: 1,
 				description:
-					"Summary of what you investigated and the plan you are proposing. This is shown to the user in the confirmation dialog.",
+					"Short summary of what you investigated and the plan you are proposing. This is shown in the confirmation dialog.",
+			}),
+			plan: Type.String({
+				minLength: 1,
+				description:
+					"Full implementation plan in markdown. This is displayed to the user before the exit confirmation options are shown.",
 			}),
 		}),
 
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+		async execute(_toolCallId, params, _signal, onUpdate, ctx) {
 			if (!planModeEnabled) {
 				throw new Error("Plan mode is not currently active.");
 			}
@@ -192,9 +198,32 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				throw new Error("Cannot exit plan mode: no UI available (running in non-interactive mode).");
 			}
 
-			ctx.ui.notify(params.reason, "info");
+			const reason = params.reason.trim();
+			const plan = params.plan.trim();
 
-			const choice = await ctx.ui.select("Exit plan mode?", ["Exit plan mode", "Stay in plan mode", "Reply..."]);
+			if (!reason) {
+				throw new Error("Cannot exit plan mode: reason is required.");
+			}
+
+			if (!plan) {
+				throw new Error("Cannot exit plan mode: plan markdown is required.");
+			}
+
+			onUpdate?.({
+				content: [
+					{
+						type: "text",
+						text: `# Proposed Plan\n\n${plan}`,
+					},
+				],
+				details: { reason },
+			});
+
+			const choice = await ctx.ui.select(`Exit plan mode?\n\n${reason}`, [
+				"Exit plan mode",
+				"Stay in plan mode",
+				"Reply...",
+			]);
 
 			if (choice === "Exit plan mode") {
 				exitPlanMode(ctx);

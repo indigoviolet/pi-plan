@@ -35,6 +35,12 @@ Use `/plan` to toggle plan mode. When enabled:
 
 Use `/plan` again to return to normal mode with full tool access.
 
+When the agent requests to leave plan mode via `exit_plan_mode`, it must provide:
+- a short summary in `reason`
+- a full markdown implementation plan in `plan`
+
+`pi-plan` shows the submitted plan first, then prompts you to either exit plan mode, stay in plan mode, or reply with feedback.
+
 ### Keyboard Shortcut
 
 `alt+p` is bound by default. To change or disable it, use `/extension-settings` and edit the `shortcut` setting under `plan` (e.g. `tab`, `ctrl+alt+p`, or empty to disable it).

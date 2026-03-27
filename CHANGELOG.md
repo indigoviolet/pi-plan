@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Switch the package to TS-first publishing by shipping `src/index.ts` directly instead of a built `dist/` output
 - Expose explicit machine-readable plan mode state via `plan-mode-state` session entries and `plan-mode:changed` events for cross-extension integrations
 - Move plan-mode LLM guidance into the real system prompt while keeping legacy hidden messages only for backward-compatible session restore
+- Require `exit_plan_mode` to provide a markdown plan and show it before the exit approval options
 
 ## [0.3.1] - 2026-03-07
 
