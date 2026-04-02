@@ -11,8 +11,8 @@
  */
 
 import { getSetting, type SettingDefinition } from "@juanibiapina/pi-extension-settings";
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { KeyId } from "@mariozechner/pi-tui";
+import { type ExtensionAPI, type ExtensionContext, getMarkdownTheme } from "@mariozechner/pi-coding-agent";
+import { type KeyId, Markdown, Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 
 // Read-only tools allowed in plan mode (exit_plan_mode is added dynamically since it's registered by this extension)
@@ -216,7 +216,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						text: `# Proposed Plan\n\n${plan}`,
 					},
 				],
-				details: { reason },
+				details: { kind: "proposed-plan", reason },
 			});
 
 			const choice = await ctx.ui.select(`Exit plan mode?\n\n${reason}`, [
@@ -260,6 +260,20 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				content: [{ type: "text", text: "User declined to exit plan mode." }],
 				details: { approved: false },
 			};
+		},
+
+		renderResult(result, { isPartial }, theme) {
+			const textBlock = result.content.find((block) => block.type === "text");
+			const contentText = textBlock?.type === "text" ? textBlock.text : "";
+			const details = result.details as { kind?: string } | undefined;
+
+			if (isPartial && details?.kind === "proposed-plan") {
+				return new Markdown(contentText, 0, 0, getMarkdownTheme(), {
+					color: (value) => theme.fg("text", value),
+				});
+			}
+
+			return new Text(contentText, 0, 0);
 		},
 	});
 
