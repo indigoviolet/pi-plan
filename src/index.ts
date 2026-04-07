@@ -304,36 +304,35 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		};
 	});
 
-	// Restore state on session start/resume
-	pi.on("session_start", async (_event, ctx) => {
+	// Restore state on session start, resume, new, or fork
+	// (session_switch and session_fork were removed in pi 0.65.0;
+	//  session_start now fires with event.reason for all transitions)
+	pi.on("session_start", async (event, ctx) => {
 		const explicitState = getLastPlanModeStateFromSession(ctx);
 		const legacyMessageState = getLastMessagedStateFromSession(ctx);
-		const flagState = pi.getFlag("plan") === true;
 
-		planModeEnabled = explicitState ?? legacyMessageState ?? flagState;
+		if (event.reason === "startup" || event.reason === "reload") {
+			// Initial startup: also consider the --plan CLI flag
+			const flagState = pi.getFlag("plan") === true;
+			planModeEnabled = explicitState ?? legacyMessageState ?? flagState;
 
-		if (planModeEnabled) {
-			savedTools = pi.getActiveTools();
-			pi.setActiveTools(PLAN_MODE_TOOLS);
+			if (planModeEnabled) {
+				savedTools = pi.getActiveTools();
+				pi.setActiveTools(PLAN_MODE_TOOLS);
+			} else {
+				savedTools = null;
+			}
 		} else {
-			savedTools = null;
-		}
-		updateStatus(ctx);
-	});
+			// "new", "resume", "fork" — session switch
+			planModeEnabled = explicitState ?? legacyMessageState ?? false;
 
-	// Reset state on session switch (/new or /resume)
-	pi.on("session_switch", async (_event, ctx) => {
-		const explicitState = getLastPlanModeStateFromSession(ctx);
-		const legacyMessageState = getLastMessagedStateFromSession(ctx);
-
-		planModeEnabled = explicitState ?? legacyMessageState ?? false;
-
-		if (planModeEnabled) {
-			savedTools = pi.getActiveTools();
-			pi.setActiveTools(PLAN_MODE_TOOLS);
-		} else if (savedTools) {
-			pi.setActiveTools(savedTools);
-			savedTools = null;
+			if (planModeEnabled) {
+				savedTools = pi.getActiveTools();
+				pi.setActiveTools(PLAN_MODE_TOOLS);
+			} else if (savedTools) {
+				pi.setActiveTools(savedTools);
+				savedTools = null;
+			}
 		}
 		updateStatus(ctx);
 	});
