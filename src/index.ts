@@ -12,7 +12,7 @@
 
 import { getSetting, type SettingDefinition } from "@juanibiapina/pi-extension-settings";
 import { type ExtensionAPI, type ExtensionContext, getMarkdownTheme } from "@mariozechner/pi-coding-agent";
-import { type KeyId, Markdown, Text } from "@mariozechner/pi-tui";
+import { Container, type KeyId, Markdown, Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 
 // Read-only tools allowed in plan mode (exit_plan_mode is added dynamically since it's registered by this extension)
@@ -39,6 +39,10 @@ When you have a concrete implementation plan ready for review, call \`exit_plan_
 interface PlanModeStateData {
 	enabled: boolean;
 	source: string;
+}
+
+interface SessionStartEventWithReason {
+	reason?: "startup" | "reload" | "new" | "resume" | "fork";
 }
 
 function isCustomTypeEntry(
@@ -246,10 +250,15 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						content: [
 							{
 								type: "text",
-								text: `User wants to stay in plan mode and provided feedback: ${feedback}`,
+								text: `# Proposed Plan\n\n${plan}`,
 							},
 						],
-						details: { approved: false, feedback },
+						details: {
+							approved: false,
+							kind: "proposed-plan",
+							status: "Stayed in plan mode.",
+							feedback,
+						},
 					};
 				}
 			}
@@ -257,20 +266,41 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			// "Stay in plan mode", Escape, or empty reply — abort the turn silently
 			ctx.abort();
 			return {
-				content: [{ type: "text", text: "User declined to exit plan mode." }],
-				details: { approved: false },
+				content: [{ type: "text", text: `# Proposed Plan\n\n${plan}` }],
+				details: {
+					approved: false,
+					kind: "proposed-plan",
+					status: "Stayed in plan mode.",
+				},
 			};
 		},
 
 		renderResult(result, { isPartial }, theme) {
 			const textBlock = result.content.find((block) => block.type === "text");
 			const contentText = textBlock?.type === "text" ? textBlock.text : "";
-			const details = result.details as { kind?: string } | undefined;
+			const details = result.details as { kind?: string; status?: string; feedback?: string } | undefined;
 
-			if (isPartial && details?.kind === "proposed-plan") {
-				return new Markdown(contentText, 0, 0, getMarkdownTheme(), {
-					color: (value) => theme.fg("text", value),
-				});
+			if (details?.kind === "proposed-plan") {
+				const container = new Container();
+				container.addChild(
+					new Markdown(contentText, 0, 0, getMarkdownTheme(), {
+						color: (value) => theme.fg("text", value),
+					}),
+				);
+
+				if (!isPartial) {
+					if (details.status) {
+						container.addChild(new Text(theme.fg("warning", details.status), 0, 0));
+					}
+					if (details.feedback) {
+						container.addChild(new Text(theme.fg("muted", `Feedback: ${details.feedback}`), 0, 0));
+					}
+					if (!details.status && !details.feedback) {
+						container.addChild(new Text(theme.fg("warning", "Stayed in plan mode."), 0, 0));
+					}
+				}
+
+				return container;
 			}
 
 			return new Text(contentText, 0, 0);
@@ -310,8 +340,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", async (event, ctx) => {
 		const explicitState = getLastPlanModeStateFromSession(ctx);
 		const legacyMessageState = getLastMessagedStateFromSession(ctx);
+		const eventReason = (event as SessionStartEventWithReason).reason;
 
-		if (event.reason === "startup" || event.reason === "reload") {
+		if (eventReason === "startup" || eventReason === "reload") {
 			// Initial startup: also consider the --plan CLI flag
 			const flagState = pi.getFlag("plan") === true;
 			planModeEnabled = explicitState ?? legacyMessageState ?? flagState;
